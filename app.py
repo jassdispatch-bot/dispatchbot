@@ -42,26 +42,29 @@ def respond():
             bot.sendMessage(chat_id=chat_id, text=welcome_msg[language], reply_markup=lang_keyboard)
             return "ok"
 
-        # Определим язык
         lang = "ru" if any(char in text.lower() for char in "абвгдеёжзийклмнопрстуфхцчшщьыъэюя") else "en"
-
-        # Подготовим prompt
         prompt = {
             "ru": f"Ты AI-диспетчер. Пользователь написал: "{text}". Если он ищет груз — предложи 2-3 маршрута с городами, расстоянием, типом груза и ставкой. Если пишет брокеру — сгенерируй вежливое деловое сообщение.",
             "en": f"You are an AI dispatcher. The user said: "{text}". If it's a freight request — suggest 2-3 realistic load routes with cities, mileage, cargo type and rate. If it's for a broker — generate a polite business message."
         }
 
-        response = openai.ChatCompletion.create(
-            model=GPT_MODEL,
-            messages=[{"role": "user", "content": prompt[lang]}]
-        )
-        reply = response["choices"][0]["message"]["content"]
-        bot.sendMessage(chat_id=chat_id, text=reply)
+        try:
+            response = openai.ChatCompletion.create(
+                model=GPT_MODEL,
+                messages=[{"role": "user", "content": prompt[lang]}]
+            )
+            reply = response["choices"][0]["message"]["content"]
+            bot.sendMessage(chat_id=chat_id, text=reply)
+
+        except openai.error.AuthenticationError:
+            bot.sendMessage(chat_id=chat_id, text="OpenAI API ключ не работает. Проверь настройки.")
+        except Exception as e:
+            bot.sendMessage(chat_id=chat_id, text=f"Ошибка при запросе к OpenAI: {str(e)}")
 
     except Exception as e:
-        logging.exception("ERROR in bot")
+        logging.exception("Ошибка в Telegram обработчике")
         if update and update.effective_chat:
-            bot.sendMessage(chat_id=update.effective_chat.id, text=f"Произошла ошибка: {str(e)}")
+            bot.sendMessage(chat_id=update.effective_chat.id, text=f"Ошибка в боте: {str(e)}")
 
     return "ok"
 
