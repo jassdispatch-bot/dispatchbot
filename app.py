@@ -22,37 +22,46 @@ lang_keyboard = ReplyKeyboardMarkup([
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def respond():
-    update = telegram.Update.de_json(request.get_json(force=True), bot)
-    chat_id = update.message.chat.id
-    text = update.message.text
+    try:
+        update = telegram.Update.de_json(request.get_json(force=True), bot)
+        message = update.message
 
-    if text in ["/start", "Русский", "English"]:
-        language = "ru" if text == "Русский" else "en"
-        welcome_msg = {
-            "ru": "Привет! Я JassDispatch — твой AI-диспетчер. Чем могу помочь?",
-            "en": "Hi! I’m JassDispatch — your AI dispatcher. How can I assist you?"
-        }
-        bot.sendMessage(chat_id=chat_id, text=welcome_msg[language], reply_markup=lang_keyboard)
-        return "ok"
+        if not message or not message.text:
+            bot.sendMessage(chat_id=update.effective_chat.id, text="Пустое сообщение. Повтори запрос.")
+            return "ok"
 
-    if text:
-        # Автоматическое определение языка и обработка GPT
-        prompt_ru = f"Ты выступаешь как AI-диспетчер грузов. Пользователь написал: "{text}". Ответь как настоящий логист. Если это запрос на поиск груза — предложи 2-3 маршрута с городами, расстоянием, ставкой и типом груза. Если это обращение к брокеру — сгенерируй вежливое сообщение."
-        prompt_en = f"You are acting as an AI freight dispatcher. The user said: "{text}". Respond like a real logistics manager. If it's a freight search — offer 2-3 routes with cities, distance, price and load type. If it's a broker message — generate a polite request."
+        chat_id = message.chat.id
+        text = message.text.strip()
 
-        # Определим язык текста
+        if text in ["/start", "Русский", "English"]:
+            language = "ru" if text == "Русский" else "en"
+            welcome_msg = {
+                "ru": "Привет! Я JassDispatch — твой AI-диспетчер. Чем могу помочь?",
+                "en": "Hi! I’m JassDispatch — your AI dispatcher. How can I assist you?"
+            }
+            bot.sendMessage(chat_id=chat_id, text=welcome_msg[language], reply_markup=lang_keyboard)
+            return "ok"
+
+        # Определим язык
         lang = "ru" if any(char in text.lower() for char in "абвгдеёжзийклмнопрстуфхцчшщьыъэюя") else "en"
-        prompt = prompt_ru if lang == "ru" else prompt_en
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=GPT_MODEL,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            reply = response["choices"][0]["message"]["content"]
-            bot.sendMessage(chat_id=chat_id, text=reply)
-        except Exception as e:
-            bot.sendMessage(chat_id=chat_id, text=f"Произошла ошибка: {e}")
+        # Подготовим prompt
+        prompt = {
+            "ru": f"Ты AI-диспетчер. Пользователь написал: "{text}". Если он ищет груз — предложи 2-3 маршрута с городами, расстоянием, типом груза и ставкой. Если пишет брокеру — сгенерируй вежливое деловое сообщение.",
+            "en": f"You are an AI dispatcher. The user said: "{text}". If it's a freight request — suggest 2-3 realistic load routes with cities, mileage, cargo type and rate. If it's for a broker — generate a polite business message."
+        }
+
+        response = openai.ChatCompletion.create(
+            model=GPT_MODEL,
+            messages=[{"role": "user", "content": prompt[lang]}]
+        )
+        reply = response["choices"][0]["message"]["content"]
+        bot.sendMessage(chat_id=chat_id, text=reply)
+
+    except Exception as e:
+        logging.exception("ERROR in bot")
+        if update and update.effective_chat:
+            bot.sendMessage(chat_id=update.effective_chat.id, text=f"Произошла ошибка: {str(e)}")
 
     return "ok"
 
